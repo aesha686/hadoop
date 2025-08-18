@@ -1,0 +1,174 @@
+package firstdemo;
+
+import java.io.IOException;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+public class average {
+
+    // ---------- Mapper ----------
+    public static class AverageMapper extends Mapper<LongWritable, Text, Text, IntWritable> {
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+            // Skip header
+            if (key.get() == 0 && value.toString().contains("name")) {
+                return;
+            }
+
+            String[] fields = value.toString().split(",");
+
+            try {
+                // CSV Format: name,subject,rollno,marks
+                String subject = fields[1].trim();  
+                int marks = Integer.parseInt(fields[3].trim());
+
+                context.write(new Text(subject), new IntWritable(marks));
+
+            } catch (Exception e) {
+                // skip bad rows
+            }
+        }
+    }
+
+    // ---------- Reducer ----------
+    public static class AverageReducer extends Reducer<Text, IntWritable, Text, Text> {
+        public void reduce(Text key, Iterable<IntWritable> values, Context context)
+                throws IOException, InterruptedException {
+
+            int sum = 0;
+            int count = 0;
+            int min = Integer.MAX_VALUE;
+            int max = Integer.MIN_VALUE;
+
+            for (IntWritable val : values) {
+                int marks = val.get();
+                sum += marks;
+                count++;
+
+                if (marks < min) min = marks;
+                if (marks > max) max = marks;
+            }
+
+            double average = (double) sum / count;
+
+            // Output: Subject   Sum=XX, Average=YY, Min=ZZ, Max=WW
+            context.write(key, new Text("Sum=" + sum + 
+                                        ", Average=" + average +
+                                        ", Min=" + min +
+                                        ", Max=" + max));
+        }
+    }
+
+    // ---------- Main ----------
+    public static void main(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "Subject wise marks calculation");
+
+        job.setJarByClass(average.class);
+        job.setMapperClass(AverageMapper.class);
+        job.setReducerClass(AverageReducer.class);
+
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(IntWritable.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(Text.class);
+
+        FileInputFormat.addInputPath(job, new Path(args[0]));   // Input CSV
+        FileOutputFormat.setOutputPath(job, new Path(args[1])); // Output directory
+
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+}
+
+
+//
+
+package firstdemo;
+
+import java.io.IOException;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+public class average {
+
+    // ---------- Mapper ----------
+    public static class AverageMapper extends Mapper<LongWritable, Text, Text, IntWritable> {
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+            // Skip header row
+            if (key.get() == 0 && value.toString().contains("name")) {
+                return;
+            }
+
+            String[] fields = value.toString().split(",");
+
+            try {
+                // Assuming CSV format: name,subject,rollno,marks
+                String subject = fields[1].trim();  
+                int marks = Integer.parseInt(fields[3].trim());
+
+                context.write(new Text(subject), new IntWritable(marks));
+
+            } catch (Exception e) {
+                // skip bad rows
+            }
+        }
+    }
+
+    // ---------- Reducer ----------
+    public static class AverageReducer extends Reducer<Text, IntWritable, Text, Text> {
+        public void reduce(Text key, Iterable<IntWritable> values, Context context)
+                throws IOException, InterruptedException {
+
+            int sum = 0;
+            int count = 0;
+
+            for (IntWritable val : values) {
+                sum += val.get();
+                count++;
+            }
+
+            double average = (double) sum / count;
+
+            // Output format: Subject   Sum=XX , Average=YY
+            context.write(key, new Text("Sum=" + sum + ", Average=" + average));
+        }
+    }
+
+    // ---------- Main ----------
+    public static void main(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "Subject wise marks calculation");
+
+        job.setJarByClass(average.class);
+        job.setMapperClass(AverageMapper.class);
+        job.setReducerClass(AverageReducer.class);
+
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(IntWritable.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(Text.class);
+
+        FileInputFormat.addInputPath(job, new Path(args[0]));   // <-- Fix index
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+}
