@@ -1,0 +1,87 @@
+```java
+import java.io.IOException;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+public class CSVValidation {
+
+    public static class ValidationMapper extends Mapper<LongWritable, Text, Text, Text> {
+
+        // Regex patterns
+        private static final String EMAIL_REGEX = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
+        private static final String PASSWORD_REGEX = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%^&+=!]).{8,}$";
+        private static final String CONTACT_REGEX = "^[0-9]{10}$";
+
+        @Override
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+            // Skip header if present
+            if (key.get() == 0 && value.toString().contains("Email")) {
+                return;
+            }
+
+            String line = value it.toString();
+            String[] fields = line.split(",");
+
+            if (fields.length < 3) {
+                context.write(new Text("InvalidRecord"), new Text(line));
+                return;
+            }
+
+            String email = fields[0].trim();
+            String password = fields[1].trim();
+            String contact = fields[2].trim();
+
+            boolean emailValid = Pattern.matches(EMAIL_REGEX, email);
+            boolean passwordValid = Pattern.matches(PASSWORD_REGEX, password);
+            boolean contactValid = Pattern.matches(CONTACT_REGEX, contact);
+
+            if (emailValid && passwordValid && contactValid) {
+                context.write(new Text("ValidRecord"), new Text(line));
+            } else {
+                StringBuilder sb = new StringBuilder("Invalid: ");
+                if (!emailValid) sb.append("Email ");
+                if (!passwordValid) sb.append("Password ");
+                if (!contactValid) sb.append("Contact ");
+                context.write(new Text("InvalidRecord"), new Text(line + " -> " + sb.toString()));
+            }
+        }
+    }
+
+    public static class ValidationReducer extends Reducer<Text, Text, Text, Text> {
+        @Override
+        public void reduce(Text key, Iterable<Text> values, Context context)
+                throws IOException, InterruptedException {
+            for (Text val : values) {
+                context.write(key, val);
+            }
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "CSV Validation");
+
+        job.setJarByClass(CSVValidation.class);
+        job.setMapperClass(ValidationMapper.class);
+        job.setReducerClass(ValidationReducer.class);
+
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(Text.class);
+
+        FileInputFormat.addInputPath(job, new Path(args[0]));  // Input CSV
+        FileOutputFormat.setOutputPath(job, new Path(args[1])); // Output folder
+
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+}
+```
